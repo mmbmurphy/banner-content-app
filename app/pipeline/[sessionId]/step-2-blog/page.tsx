@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { usePipelineStore } from '@/lib/store/session-store';
 import { marked } from 'marked';
@@ -18,7 +18,9 @@ export default function Step2Blog() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
+  const [customPrompt, setCustomPrompt] = useState(session?.topic.outline || '');
   const [publishStatus, setPublishStatus] = useState<{
     success?: boolean;
     url?: string;
@@ -34,6 +36,7 @@ export default function Step2Blog() {
 
     setIsGenerating(true);
     setError(null);
+    setErrorDetails(null);
 
     try {
       const res = await fetch('/api/claude/generate-blog', {
@@ -42,16 +45,18 @@ export default function Step2Blog() {
         body: JSON.stringify({
           title: session.topic.title,
           slug: session.topic.slug,
-          outline: session.topic.outline,
+          outline: customPrompt || session.topic.outline,
         }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to generate blog');
+        setError(data.error || 'Failed to generate blog');
+        setErrorDetails(data.details || `Status: ${res.status}`);
+        return;
       }
 
-      const data = await res.json();
       setContent(data.content);
       setFrontmatter(data.frontmatter);
 
@@ -63,6 +68,8 @@ export default function Step2Blog() {
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate blog');
+      setErrorDetails('Network error or server unavailable. Check browser console for details.');
+      console.error('Blog generation error:', err);
     } finally {
       setIsGenerating(false);
     }
@@ -168,9 +175,29 @@ export default function Step2Blog() {
       {/* Error Display */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error}
+          <p className="font-medium">{error}</p>
+          {errorDetails && (
+            <p className="text-sm mt-1 text-red-600">{errorDetails}</p>
+          )}
         </div>
       )}
+
+      {/* Custom Prompt */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Instructions for AI (optional)
+        </label>
+        <textarea
+          value={customPrompt}
+          onChange={(e) => setCustomPrompt(e.target.value)}
+          placeholder="Add specific instructions, key points to cover, target audience details, or any other guidance for the AI..."
+          rows={3}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-accent focus:border-transparent text-sm"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          These instructions will be sent to Claude when generating the blog post.
+        </p>
+      </div>
 
       {/* Success Display */}
       {publishStatus?.success && (

@@ -5,7 +5,7 @@ export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
-    const { title, slug, content } = await request.json();
+    const { title, slug, content, customPrompt } = await request.json();
 
     if (!content) {
       return NextResponse.json({ error: 'Blog content is required' }, { status: 400 });
@@ -13,14 +13,21 @@ export async function POST(request: Request) {
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 });
+      return NextResponse.json({
+        error: 'ANTHROPIC_API_KEY not configured',
+        details: 'Please add ANTHROPIC_API_KEY to your environment variables in Vercel dashboard.'
+      }, { status: 500 });
     }
 
-    const userPrompt = `ARTICLE TITLE: ${title}
+    let userPrompt = `ARTICLE TITLE: ${title}
 ARTICLE SLUG: ${slug}
 
 ARTICLE CONTENT:
 ${content}`;
+
+    if (customPrompt) {
+      userPrompt += `\n\nADDITIONAL INSTRUCTIONS FROM USER:\n${customPrompt}`;
+    }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -42,9 +49,21 @@ ${content}`;
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error('Claude API error:', error);
-      return NextResponse.json({ error: 'Failed to generate LinkedIn content' }, { status: 500 });
+      const errorText = await response.text();
+      console.error('Claude API error:', errorText);
+      let errorMessage = 'Failed to generate LinkedIn content';
+      let details = `Claude API returned status ${response.status}`;
+
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.error?.message) {
+          details = errorJson.error.message;
+        }
+      } catch {
+        details = errorText.substring(0, 200);
+      }
+
+      return NextResponse.json({ error: errorMessage, details }, { status: 500 });
     }
 
     const data = await response.json();

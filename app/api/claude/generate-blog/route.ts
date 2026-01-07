@@ -13,7 +13,10 @@ export async function POST(request: Request) {
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 });
+      return NextResponse.json({
+        error: 'ANTHROPIC_API_KEY not configured',
+        details: 'Please add ANTHROPIC_API_KEY to your environment variables in Vercel dashboard.'
+      }, { status: 500 });
     }
 
     const today = new Date().toISOString().split('T')[0];
@@ -45,9 +48,21 @@ Write the complete article with frontmatter in markdown format.`;
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error('Claude API error:', error);
-      return NextResponse.json({ error: 'Failed to generate blog content' }, { status: 500 });
+      const errorText = await response.text();
+      console.error('Claude API error:', errorText);
+      let errorMessage = 'Failed to generate blog content';
+      let details = `Claude API returned status ${response.status}`;
+
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.error?.message) {
+          details = errorJson.error.message;
+        }
+      } catch {
+        details = errorText.substring(0, 200);
+      }
+
+      return NextResponse.json({ error: errorMessage, details }, { status: 500 });
     }
 
     const data = await response.json();

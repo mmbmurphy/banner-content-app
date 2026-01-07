@@ -17,7 +17,9 @@ export default function Step3LinkedIn() {
   const [carousel, setCarousel] = useState<Partial<CarouselData>>(session?.linkedin.carousel || {});
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [customPrompt, setCustomPrompt] = useState('');
 
   // Generate LinkedIn content from Claude
   const handleGenerate = async () => {
@@ -28,6 +30,7 @@ export default function Step3LinkedIn() {
 
     setIsGenerating(true);
     setError(null);
+    setErrorDetails(null);
 
     try {
       const res = await fetch('/api/claude/generate-linkedin', {
@@ -37,15 +40,18 @@ export default function Step3LinkedIn() {
           title: session.topic.title,
           slug: session.topic.slug,
           content: session.blog.content,
+          customPrompt: customPrompt,
         }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to generate LinkedIn content');
+        setError(data.error || 'Failed to generate LinkedIn content');
+        setErrorDetails(data.details || `Status: ${res.status}`);
+        return;
       }
 
-      const data = await res.json();
       setPosts(data.posts);
       setCarousel(data.carousel);
 
@@ -57,6 +63,8 @@ export default function Step3LinkedIn() {
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate content');
+      setErrorDetails('Network error or server unavailable. Check browser console for details.');
+      console.error('LinkedIn generation error:', err);
     } finally {
       setIsGenerating(false);
     }
@@ -130,9 +138,29 @@ export default function Step3LinkedIn() {
       {/* Error Display */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error}
+          <p className="font-medium">{error}</p>
+          {errorDetails && (
+            <p className="text-sm mt-1 text-red-600">{errorDetails}</p>
+          )}
         </div>
       )}
+
+      {/* Custom Prompt */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Instructions for AI (optional)
+        </label>
+        <textarea
+          value={customPrompt}
+          onChange={(e) => setCustomPrompt(e.target.value)}
+          placeholder="e.g., Focus on ROI metrics, make it more technical, add a personal anecdote hook, target CFOs..."
+          rows={2}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-accent focus:border-transparent text-sm"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Guide the AI on tone, focus areas, or specific angles for the LinkedIn posts.
+        </p>
+      </div>
 
       {/* Action Buttons */}
       <div className="flex gap-3 mb-6">
