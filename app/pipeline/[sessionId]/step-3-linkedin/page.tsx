@@ -16,10 +16,12 @@ export default function Step3LinkedIn() {
   const [posts, setPosts] = useState<LinkedInPost[]>(session?.linkedin.posts || []);
   const [carousel, setCarousel] = useState<Partial<CarouselData>>(session?.linkedin.carousel || {});
   const [isGenerating, setIsGenerating] = useState(false);
+  const [regeneratingPostId, setRegeneratingPostId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
+  const [postPrompts, setPostPrompts] = useState<Record<string, string>>({});
 
   // Generate LinkedIn content from Claude
   const handleGenerate = async () => {
@@ -75,6 +77,67 @@ export default function Step3LinkedIn() {
       console.error('LinkedIn generation error:', err);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // Regenerate a single post with feedback
+  const handleRegeneratePost = async (postId: string) => {
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+
+    const feedback = postPrompts[postId];
+    if (!feedback?.trim()) {
+      setError('Please enter feedback for how you want to change this post');
+      return;
+    }
+
+    setRegeneratingPostId(postId);
+    setError(null);
+    setErrorDetails(null);
+
+    try {
+      const res = await fetch('/api/claude/regenerate-post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originalPost: post.content,
+          feedback: feedback,
+          title: session?.topic.title,
+          slug: session?.topic.slug,
+          postType: post.type,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to regenerate post');
+        setErrorDetails(data.details);
+        return;
+      }
+
+      // Update the post
+      const updatedPosts = posts.map(p =>
+        p.id === postId
+          ? {
+              ...p,
+              content: data.content,
+              hook_line: data.hook_line,
+              hashtags: data.hashtags,
+              isEdited: true,
+            }
+          : p
+      );
+
+      setPosts(updatedPosts);
+      updateStepData(sessionId, 'linkedin', { posts: updatedPosts });
+
+      // Clear the prompt
+      setPostPrompts(prev => ({ ...prev, [postId]: '' }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to regenerate post');
+    } finally {
+      setRegeneratingPostId(null);
     }
   };
 
@@ -251,6 +314,36 @@ export default function Step3LinkedIn() {
                       {tag}
                     </span>
                   ))}
+                </div>
+
+                {/* Individual Post Regeneration */}
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={postPrompts[post.id] || ''}
+                      onChange={(e) => setPostPrompts(prev => ({ ...prev, [post.id]: e.target.value }))}
+                      placeholder="e.g., Make it shorter, add statistics, more conversational tone..."
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-accent focus:border-transparent"
+                    />
+                    <button
+                      onClick={() => handleRegeneratePost(post.id)}
+                      disabled={regeneratingPostId === post.id || !postPrompts[post.id]?.trim()}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {regeneratingPostId === post.id ? (
+                        <>
+                          <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600"></span>
+                          Regenerating...
+                        </>
+                      ) : (
+                        'Regenerate'
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Describe how you want to change this post
+                  </p>
                 </div>
               </div>
             </div>

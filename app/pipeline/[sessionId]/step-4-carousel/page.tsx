@@ -28,17 +28,108 @@ export default function Step4Carousel() {
       : session?.linkedin.carousel?.slides || []
   );
   const [hook, setHook] = useState(session?.linkedin.carousel?.hook || '');
+  const [ctaSlide, setCtaSlide] = useState(session?.linkedin.carousel?.cta_slide || {
+    headline: 'Read the Full Guide',
+    url: `withbanner.com/info/${session?.topic.slug}`,
+  });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedImages, setGeneratedImages] = useState<string[]>(session?.carousel.imageUrls || []);
   const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
+  const [carouselPrompt, setCarouselPrompt] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Regenerate carousel content with AI
+  const handleRegenerateCarousel = async () => {
+    if (!carouselPrompt.trim()) {
+      setError('Please enter feedback for how you want to change the carousel');
+      return;
+    }
+
+    setIsRegenerating(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/claude/regenerate-carousel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hook,
+          slides: slides.map(s => ({ headline: s.headline, subhead: s.subhead })),
+          feedback: carouselPrompt,
+          title: session?.topic.title,
+          slug: session?.topic.slug,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to regenerate carousel');
+        return;
+      }
+
+      setHook(data.hook);
+      setSlides(data.slides);
+      if (data.cta_slide) {
+        setCtaSlide(data.cta_slide);
+      }
+
+      // Clear generated images since content changed
+      setGeneratedImages([]);
+
+      // Save to store
+      updateStepData(sessionId, 'carousel', {
+        slides: data.slides,
+        imageUrls: [],
+        status: 'pending',
+      });
+      updateStepData(sessionId, 'linkedin', {
+        carousel: {
+          ...session?.linkedin.carousel,
+          hook: data.hook,
+          slides: data.slides,
+          cta_slide: data.cta_slide,
+        },
+      });
+
+      setCarouselPrompt('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to regenerate carousel');
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
 
   // Update a single slide
   const handleUpdateSlide = (slideId: string, updates: Partial<CarouselSlide>) => {
     const updatedSlides = slides.map((slide) =>
       slide.id === slideId ? { ...slide, ...updates, isEdited: true } : slide
     );
+    setSlides(updatedSlides);
+    updateStepData(sessionId, 'carousel', { slides: updatedSlides });
+  };
+
+  // Add a new slide
+  const handleAddSlide = () => {
+    const newSlide: CarouselSlide = {
+      id: `slide_${Date.now()}`,
+      slideNumber: slides.length + 1,
+      type: 'content',
+      headline: 'New Slide',
+      subhead: '',
+      isEdited: false,
+    };
+    const updatedSlides = [...slides, newSlide];
+    setSlides(updatedSlides);
+    updateStepData(sessionId, 'carousel', { slides: updatedSlides });
+    setEditingSlideId(newSlide.id);
+  };
+
+  // Remove a slide
+  const handleRemoveSlide = (slideId: string) => {
+    const updatedSlides = slides.filter(s => s.id !== slideId);
     setSlides(updatedSlides);
     updateStepData(sessionId, 'carousel', { slides: updatedSlides });
   };
@@ -72,15 +163,14 @@ export default function Step4Carousel() {
           wrapText(ctx, hook, 540, 480, 900, 80);
         } else if (isCtaSlide) {
           // CTA slide
-          const ctaSlide = session?.linkedin.carousel?.cta_slide;
           ctx.fillStyle = BRAND.PRIMARY;
           ctx.font = 'bold 56px Inter, system-ui, sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText(ctaSlide?.headline || 'Read the Full Guide', 540, 440);
+          ctx.fillText(ctaSlide.headline || 'Read the Full Guide', 540, 440);
 
           ctx.fillStyle = BRAND.ACCENT;
           ctx.font = '36px Inter, system-ui, sans-serif';
-          ctx.fillText(ctaSlide?.url || `withbanner.com/info/${session?.topic.slug}`, 540, 540);
+          ctx.fillText(ctaSlide.url || `withbanner.com/info/${session?.topic.slug}`, 540, 540);
 
           // Logo placeholder
           ctx.fillStyle = BRAND.ACCENT;
@@ -110,7 +200,7 @@ export default function Step4Carousel() {
         resolve(canvas.toDataURL('image/png'));
       });
     },
-    [slides, hook, session]
+    [slides, hook, ctaSlide, session]
   );
 
   // Helper function to wrap text
@@ -226,6 +316,39 @@ export default function Step4Carousel() {
         </div>
       )}
 
+      {/* AI Regeneration Prompt */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Regenerate Carousel with AI
+        </label>
+        <div className="flex gap-2">
+          <textarea
+            value={carouselPrompt}
+            onChange={(e) => setCarouselPrompt(e.target.value)}
+            placeholder="e.g., Make it more concise, add more statistics, focus on benefits, create urgency..."
+            rows={2}
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-accent focus:border-transparent text-sm"
+          />
+          <button
+            onClick={handleRegenerateCarousel}
+            disabled={isRegenerating || !carouselPrompt.trim()}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 self-end"
+          >
+            {isRegenerating ? (
+              <>
+                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                Regenerating...
+              </>
+            ) : (
+              'Regenerate with AI'
+            )}
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          Describe how you want to improve the carousel slides. AI will regenerate all slide content.
+        </p>
+      </div>
+
       {/* Hook Editor */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -242,9 +365,17 @@ export default function Step4Carousel() {
 
       {/* Slides Editor */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-        <h3 className="font-semibold text-brand-primary mb-4">
-          Content Slides ({slides.length})
-        </h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-semibold text-brand-primary">
+            Content Slides ({slides.length})
+          </h3>
+          <button
+            onClick={handleAddSlide}
+            className="text-sm text-brand-accent hover:underline"
+          >
+            + Add Slide
+          </button>
+        </div>
 
         <div className="space-y-4">
           {slides.map((slide, idx) => (
@@ -256,14 +387,22 @@ export default function Step4Carousel() {
                 <span className="text-sm font-medium text-gray-500">
                   Slide {idx + 2}
                 </span>
-                <button
-                  onClick={() =>
-                    setEditingSlideId(editingSlideId === slide.id ? null : slide.id)
-                  }
-                  className="text-sm text-brand-accent hover:underline"
-                >
-                  {editingSlideId === slide.id ? 'Done' : 'Edit'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() =>
+                      setEditingSlideId(editingSlideId === slide.id ? null : slide.id)
+                    }
+                    className="text-sm text-brand-accent hover:underline"
+                  >
+                    {editingSlideId === slide.id ? 'Done' : 'Edit'}
+                  </button>
+                  <button
+                    onClick={() => handleRemoveSlide(slide.id)}
+                    className="text-sm text-red-500 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
 
               {editingSlideId === slide.id ? (
@@ -297,6 +436,29 @@ export default function Step4Carousel() {
               )}
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* CTA Slide Editor */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          CTA Slide (Last Slide)
+        </label>
+        <div className="space-y-2">
+          <input
+            type="text"
+            value={ctaSlide.headline}
+            onChange={(e) => setCtaSlide({ ...ctaSlide, headline: e.target.value })}
+            placeholder="Call to action headline"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-accent focus:border-transparent text-sm"
+          />
+          <input
+            type="text"
+            value={ctaSlide.url}
+            onChange={(e) => setCtaSlide({ ...ctaSlide, url: e.target.value })}
+            placeholder="URL"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-accent focus:border-transparent text-sm"
+          />
         </div>
       </div>
 
