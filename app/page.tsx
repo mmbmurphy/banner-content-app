@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { usePipelineStore } from '@/lib/store/session-store';
@@ -18,14 +18,44 @@ const STEP_NAMES = [
 
 export default function Dashboard() {
   const router = useRouter();
-  const { createSession, getAllSessions, deleteSession } = usePipelineStore();
+  const { createSession, getAllSessions, deleteSession, fetchSessionsFromApi, isLoading, apiInitialized } = usePipelineStore();
   const [sessions, setSessions] = useState<PipelineSession[]>([]);
   const [mounted, setMounted] = useState(false);
+  const [dbStatus, setDbStatus] = useState<'checking' | 'ready' | 'needs_init' | 'error'>('checking');
+
+  const refreshSessions = useCallback(() => {
+    setSessions(getAllSessions());
+  }, [getAllSessions]);
 
   useEffect(() => {
     setMounted(true);
-    setSessions(getAllSessions());
-  }, [getAllSessions]);
+
+    // Fetch from API first, then refresh local display
+    async function init() {
+      await fetchSessionsFromApi();
+      refreshSessions();
+      setDbStatus(apiInitialized ? 'ready' : 'needs_init');
+    }
+
+    init();
+  }, [fetchSessionsFromApi, refreshSessions, apiInitialized]);
+
+  // Initialize database if needed
+  const handleInitDb = async () => {
+    setDbStatus('checking');
+    try {
+      const res = await fetch('/api/sessions/init');
+      if (res.ok) {
+        setDbStatus('ready');
+        await fetchSessionsFromApi();
+        refreshSessions();
+      } else {
+        setDbStatus('error');
+      }
+    } catch {
+      setDbStatus('error');
+    }
+  };
 
   const handleNewPipeline = () => {
     const sessionId = createSession();
@@ -37,7 +67,7 @@ export default function Dashboard() {
     e.stopPropagation();
     if (confirm('Delete this session?')) {
       deleteSession(id);
-      setSessions(getAllSessions());
+      refreshSessions();
     }
   };
 
@@ -54,6 +84,31 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-4xl mx-auto p-8">
+      {/* Database initialization banner */}
+      {dbStatus === 'needs_init' && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-yellow-800 font-medium">Database not initialized</p>
+              <p className="text-yellow-700 text-sm">Click to set up persistent storage for your sessions.</p>
+            </div>
+            <button
+              onClick={handleInitDb}
+              className="bg-yellow-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-600 transition"
+            >
+              Initialize Database
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="flex items-center gap-2 text-gray-500 mb-4">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-brand-accent"></div>
+          <span className="text-sm">Syncing sessions...</span>
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-8">
         <h2 className="text-2xl font-bold text-brand-primary">Dashboard</h2>
         <button
