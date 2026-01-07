@@ -1,22 +1,28 @@
-import { NextResponse } from 'next/server';
 import { LINKEDIN_EXTRACTION_PROMPT } from '@/lib/constants/prompts';
 
 export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
     const { title, slug, content, customPrompt } = await request.json();
 
     if (!content) {
-      return NextResponse.json({ error: 'Blog content is required' }, { status: 400 });
+      return new Response(JSON.stringify({ error: 'Blog content is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({
+      return new Response(JSON.stringify({
         error: 'ANTHROPIC_API_KEY not configured',
         details: 'Please add ANTHROPIC_API_KEY to your environment variables in Vercel dashboard.'
-      }, { status: 500 });
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     let userPrompt = `ARTICLE TITLE: ${title}
@@ -39,6 +45,7 @@ ${content}`;
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 2000,
+        stream: true,
         messages: [
           {
             role: 'user',
@@ -63,23 +70,60 @@ ${content}`;
         details = errorText.substring(0, 200);
       }
 
-      return NextResponse.json({ error: errorMessage, details }, { status: 500 });
+      return new Response(JSON.stringify({ error: errorMessage, details }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    const data = await response.json();
-    const responseText = data.content[0].text;
+    // Stream and collect the response
+    const decoder = new TextDecoder();
+    const reader = response.body?.getReader();
+    let fullContent = '';
+
+    if (reader) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                fullContent += parsed.delta.text;
+              }
+            } catch {
+              // Skip unparseable lines
+            }
+          }
+        }
+      }
+    }
 
     // Parse JSON from response
     let linkedinData;
     try {
-      linkedinData = JSON.parse(responseText);
+      linkedinData = JSON.parse(fullContent);
     } catch {
       // Try to extract JSON from markdown code block
-      const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+      const jsonMatch = fullContent.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
         linkedinData = JSON.parse(jsonMatch[1]);
       } else {
-        throw new Error('Failed to parse LinkedIn content response');
+        return new Response(JSON.stringify({
+          error: 'Failed to parse LinkedIn content',
+          details: 'Claude did not return valid JSON. Try again.'
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
     }
 
@@ -104,7 +148,7 @@ ${content}`;
       isEdited: false,
     }));
 
-    return NextResponse.json({
+    return new Response(JSON.stringify({
       posts,
       carousel: {
         hook: carousel.hook || '',
@@ -113,12 +157,17 @@ ${content}`;
       },
       article_title: linkedinData.article_title,
       article_url: linkedinData.article_url,
+    }), {
+      headers: { 'Content-Type': 'application/json' },
     });
   } catch (error) {
     console.error('Error generating LinkedIn content:', error);
-    return NextResponse.json(
-      { error: 'Failed to generate LinkedIn content' },
-      { status: 500 }
-    );
+    return new Response(JSON.stringify({
+      error: 'Failed to generate LinkedIn content',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

@@ -27,7 +27,7 @@ export default function Step2Blog() {
     message?: string;
   } | null>(null);
 
-  // Generate blog content from Claude
+  // Generate blog content from Claude (streaming)
   const handleGenerate = async () => {
     if (!session?.topic.title) {
       setError('No topic selected');
@@ -37,6 +37,7 @@ export default function Step2Blog() {
     setIsGenerating(true);
     setError(null);
     setErrorDetails(null);
+    setContent(''); // Clear existing content
 
     try {
       const res = await fetch('/api/claude/generate-blog', {
@@ -49,30 +50,81 @@ export default function Step2Blog() {
         }),
       });
 
-      const responseText = await res.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        setError('Server returned an invalid response');
-        setErrorDetails(responseText.substring(0, 300));
-        return;
-      }
+      // Check if it's an error response (JSON) or streaming response
+      const contentType = res.headers.get('content-type') || '';
 
-      if (!res.ok) {
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
         setError(data.error || 'Failed to generate blog');
         setErrorDetails(data.details || `Status: ${res.status}`);
+        setIsGenerating(false);
         return;
       }
 
-      setContent(data.content);
-      setFrontmatter(data.frontmatter);
+      // Handle streaming response
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setError('Failed to read response');
+        setIsGenerating(false);
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let streamedContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.text) {
+                streamedContent += data.text;
+                setContent(streamedContent);
+              }
+              if (data.done && data.content) {
+                streamedContent = data.content;
+                setContent(streamedContent);
+              }
+            } catch {
+              // Skip unparseable lines
+            }
+          }
+        }
+      }
+
+      // Parse frontmatter from final content
+      const frontmatterMatch = streamedContent.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+      let parsedFrontmatter = { title: session.topic.title, slug: session.topic.slug };
+      let markdownContent = streamedContent;
+
+      if (frontmatterMatch) {
+        const frontmatterYaml = frontmatterMatch[1];
+        markdownContent = frontmatterMatch[2].trim();
+
+        frontmatterYaml.split('\n').forEach((line: string) => {
+          const colonIndex = line.indexOf(':');
+          if (colonIndex > 0) {
+            const key = line.slice(0, colonIndex).trim();
+            const value = line.slice(colonIndex + 1).trim();
+            (parsedFrontmatter as Record<string, string>)[key] = value;
+          }
+        });
+      }
+
+      setFrontmatter(parsedFrontmatter);
+      setContent(markdownContent);
 
       // Save to store
       updateStepData(sessionId, 'blog', {
-        content: data.content,
-        frontmatter: data.frontmatter,
-        htmlContent: marked(data.content) as string,
+        content: markdownContent,
+        frontmatter: parsedFrontmatter,
+        htmlContent: marked(markdownContent) as string,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate blog');

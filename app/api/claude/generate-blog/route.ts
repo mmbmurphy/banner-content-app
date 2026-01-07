@@ -1,22 +1,28 @@
-import { NextResponse } from 'next/server';
 import { BLOG_GENERATION_PROMPT } from '@/lib/constants/prompts';
 
 export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
     const { title, slug, outline } = await request.json();
 
     if (!title) {
-      return NextResponse.json({ error: 'Title is required' }, { status: 400 });
+      return new Response(JSON.stringify({ error: 'Title is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({
+      return new Response(JSON.stringify({
         error: 'ANTHROPIC_API_KEY not configured',
         details: 'Please add ANTHROPIC_API_KEY to your environment variables in Vercel dashboard.'
-      }, { status: 500 });
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     const today = new Date().toISOString().split('T')[0];
@@ -38,6 +44,7 @@ Write the complete article with frontmatter in markdown format.`;
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 4000,
+        stream: true,
         messages: [
           {
             role: 'user',
@@ -62,64 +69,72 @@ Write the complete article with frontmatter in markdown format.`;
         details = errorText.substring(0, 200);
       }
 
-      return NextResponse.json({ error: errorMessage, details }, { status: 500 });
+      return new Response(JSON.stringify({ error: errorMessage, details }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    const data = await response.json();
-    const content = data.content[0].text;
+    // Stream the response
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
 
-    // Parse frontmatter from the response
-    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+    const stream = new ReadableStream({
+      async start(controller) {
+        let fullContent = '';
+        const reader = response.body?.getReader();
+        if (!reader) {
+          controller.close();
+          return;
+        }
 
-    if (frontmatterMatch) {
-      const frontmatterYaml = frontmatterMatch[1];
-      const markdownContent = frontmatterMatch[2].trim();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-      // Simple YAML parsing
-      const frontmatter: Record<string, unknown> = {};
-      frontmatterYaml.split('\n').forEach((line: string) => {
-        const colonIndex = line.indexOf(':');
-        if (colonIndex > 0) {
-          const key = line.slice(0, colonIndex).trim();
-          let value: unknown = line.slice(colonIndex + 1).trim();
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
 
-          // Handle arrays
-          if (value === '' || (typeof value === 'string' && value.startsWith('['))) {
-            if (typeof value === 'string' && value.startsWith('[')) {
-              try {
-                value = JSON.parse(value);
-              } catch {
-                value = [];
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+
+                try {
+                  const parsed = JSON.parse(data);
+                  if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                    fullContent += parsed.delta.text;
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: parsed.delta.text })}\n\n`));
+                  }
+                } catch {
+                  // Skip unparseable lines
+                }
               }
             }
-          } else if (value === 'true') {
-            value = true;
-          } else if (value === 'false') {
-            value = false;
           }
 
-          frontmatter[key] = value;
+          // Send final message with complete content
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, content: fullContent })}\n\n`));
+          controller.close();
+        } catch (error) {
+          controller.error(error);
         }
-      });
+      },
+    });
 
-      return NextResponse.json({
-        frontmatter,
-        content: markdownContent,
-        raw: content,
-      });
-    }
-
-    // If no frontmatter found, return raw content
-    return NextResponse.json({
-      frontmatter: { title, slug },
-      content,
-      raw: content,
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
     });
   } catch (error) {
     console.error('Error generating blog:', error);
-    return NextResponse.json(
-      { error: 'Failed to generate blog content' },
-      { status: 500 }
-    );
+    return new Response(JSON.stringify({ error: 'Failed to generate blog content' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }
