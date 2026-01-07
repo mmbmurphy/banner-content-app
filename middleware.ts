@@ -8,11 +8,8 @@ export default withAuth({
 
 export const config = {
   matcher: [
-    // Protect all routes except:
-    // - /login
-    // - /api/auth (NextAuth routes)
-    // - /_next (Next.js internals)
-    // - /favicon.ico, /images, etc.
-    '/((?!login|api/auth|_next/static|_next/image|favicon.ico).*)',
+    // Protect only page routes, not API routes
+    // Exclude: /login, /api/*, /_next/*, static files
+    '/((?!login|api|_next/static|_next/image|favicon.ico).*)',
   ],
 };

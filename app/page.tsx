@@ -16,6 +16,17 @@ const STEP_NAMES = [
   'Queue',
 ];
 
+// URL slugs must match the actual folder names
+const STEP_SLUGS = [
+  'topic',
+  'blog',
+  'linkedin',
+  'carousel',
+  'pdf',
+  'export',
+  'queue',
+];
+
 export default function Dashboard() {
   const router = useRouter();
   const { createSession, getAllSessions, deleteSession, fetchSessionsFromApi, isLoading, apiInitialized } = usePipelineStore();
@@ -144,7 +155,7 @@ export default function Dashboard() {
           {sessions.map((session) => (
             <Link
               key={session.id}
-              href={`/pipeline/${session.id}/step-${session.currentStep}-${STEP_NAMES[session.currentStep - 1].toLowerCase().replace(' ', '-')}`}
+              href={`/pipeline/${session.id}/step-${session.currentStep}-${STEP_SLUGS[session.currentStep - 1]}`}
               className="block bg-white rounded-xl border border-gray-200 p-5 hover:border-brand-accent hover:shadow-md transition"
             >
               <div className="flex justify-between items-start">
