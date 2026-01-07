@@ -44,7 +44,15 @@ export default function Step3LinkedIn() {
         }),
       });
 
-      const data = await res.json();
+      const responseText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        setError('Server returned an invalid response');
+        setErrorDetails(responseText.substring(0, 300));
+        return;
+      }
 
       if (!res.ok) {
         setError(data.error || 'Failed to generate LinkedIn content');

@@ -49,7 +49,15 @@ export default function Step2Blog() {
         }),
       });
 
-      const data = await res.json();
+      const responseText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        setError('Server returned an invalid response');
+        setErrorDetails(responseText.substring(0, 300));
+        return;
+      }
 
       if (!res.ok) {
         setError(data.error || 'Failed to generate blog');
