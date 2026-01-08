@@ -48,10 +48,10 @@ async function getUserById(userId: string) {
 // GET /api/sessions/[id]/review - Get review requests for a session
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const sessionId = params.id;
+    const sessionId = (await params).id;
 
     const result = await sql`
       SELECT *
@@ -99,7 +99,7 @@ export async function GET(
 // POST /api/sessions/[id]/review - Request a review
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -113,7 +113,7 @@ export async function POST(
       return Response.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const sessionId = params.id;
+    const sessionId = (await params).id;
     const { reviewerId, step, note } = await request.json();
 
     if (!reviewerId) {
@@ -125,67 +125,46 @@ export async function POST(
       return Response.json({ error: 'Reviewer not found' }, { status: 404 });
     }
 
+    // Ensure table exists before any operations
+    await ensureTableExists();
+
     // Cancel any existing pending reviews for this session/step
-    await sql`
-      UPDATE review_requests
-      SET status = 'cancelled'
-      WHERE session_id = ${sessionId}
-        AND (step = ${step || null} OR (step IS NULL AND ${step || null} IS NULL))
-        AND status = 'pending'
-    `;
+    try {
+      await sql`
+        UPDATE review_requests
+        SET status = 'cancelled'
+        WHERE session_id = ${sessionId}
+          AND (step = ${step || null} OR (step IS NULL AND ${step || null} IS NULL))
+          AND status = 'pending'
+      `;
+    } catch (e) {
+      // Table might not exist yet, ignore
+      console.log('Update existing reviews error (non-fatal):', e);
+    }
 
     const reviewId = `review_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    try {
-      await sql`
-        INSERT INTO review_requests (
-          id, session_id, step,
-          requester_id, requester_name, requester_image,
-          reviewer_id, reviewer_name, reviewer_image,
-          note, status
-        )
-        VALUES (
-          ${reviewId},
-          ${sessionId},
-          ${step || null},
-          ${requester.id},
-          ${requester.name || requester.email},
-          ${requester.image || null},
-          ${reviewer.id},
-          ${reviewer.name || reviewer.email},
-          ${reviewer.image || null},
-          ${note || null},
-          'pending'
-        )
-      `;
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('does not exist')) {
-        await ensureTableExists();
-        await sql`
-          INSERT INTO review_requests (
-            id, session_id, step,
-            requester_id, requester_name, requester_image,
-            reviewer_id, reviewer_name, reviewer_image,
-            note, status
-          )
-          VALUES (
-            ${reviewId},
-            ${sessionId},
-            ${step || null},
-            ${requester.id},
-            ${requester.name || requester.email},
-            ${requester.image || null},
-            ${reviewer.id},
-            ${reviewer.name || reviewer.email},
-            ${reviewer.image || null},
-            ${note || null},
-            'pending'
-          )
-        `;
-      } else {
-        throw error;
-      }
-    }
+    await sql`
+      INSERT INTO review_requests (
+        id, session_id, step,
+        requester_id, requester_name, requester_image,
+        reviewer_id, reviewer_name, reviewer_image,
+        note, status
+      )
+      VALUES (
+        ${reviewId},
+        ${sessionId},
+        ${step || null},
+        ${requester.id},
+        ${requester.name || requester.email},
+        ${requester.image || null},
+        ${reviewer.id},
+        ${reviewer.name || reviewer.email},
+        ${reviewer.image || null},
+        ${note || null},
+        'pending'
+      )
+    `;
 
     // Log activity
     const activityId = `activity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -247,7 +226,7 @@ export async function POST(
 // PUT /api/sessions/[id]/review - Respond to a review
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -261,7 +240,7 @@ export async function PUT(
       return Response.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const sessionId = params.id;
+    const sessionId = (await params).id;
     const { reviewId, status, responseNote } = await request.json();
 
     if (!reviewId || !status) {
