@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import type { BrandColor, BrandLogo, BrandFont, BrandImage, BrandSocialProfile } from '@/types/brand';
+import type { BrandColor, BrandLogo, BrandFont, BrandImage, BrandSocialProfile, ContentType } from '@/types/brand';
 import { useBrandKitStore } from '@/lib/store/brand-kit-store';
 
-type TabId = 'general' | 'logos' | 'colors' | 'typography' | 'images' | 'social' | 'carousel' | 'voice';
+type TabId = 'general' | 'logos' | 'colors' | 'typography' | 'images' | 'social' | 'carousel' | 'voice' | 'content-types';
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'general', label: 'General', icon: '🏢' },
+  { id: 'content-types', label: 'Content Types', icon: '📂' },
   { id: 'logos', label: 'Logos', icon: '🖼️' },
   { id: 'colors', label: 'Colors', icon: '🎨' },
   { id: 'typography', label: 'Typography', icon: '📝' },
@@ -16,6 +17,21 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'social', label: 'Social', icon: '🔗' },
   { id: 'carousel', label: 'Carousel', icon: '📊' },
   { id: 'voice', label: 'Brand Voice', icon: '💬' },
+];
+
+const DEFAULT_COLORS = [
+  'bg-purple-100 text-purple-700',
+  'bg-indigo-100 text-indigo-700',
+  'bg-teal-100 text-teal-700',
+  'bg-cyan-100 text-cyan-700',
+  'bg-rose-100 text-rose-700',
+  'bg-amber-100 text-amber-700',
+  'bg-lime-100 text-lime-700',
+  'bg-orange-100 text-orange-700',
+  'bg-blue-100 text-blue-700',
+  'bg-green-100 text-green-700',
+  'bg-red-100 text-red-700',
+  'bg-pink-100 text-pink-700',
 ];
 
 const SOCIAL_PLATFORMS = ['linkedin', 'twitter', 'instagram', 'facebook', 'youtube', 'tiktok', 'website', 'other'] as const;
@@ -183,6 +199,50 @@ export default function SettingsPage() {
     }));
   };
 
+  // Content type helpers
+  const addContentType = () => {
+    const newType: ContentType = {
+      id: `ct_${Date.now()}`,
+      value: `type-${Date.now()}`,
+      label: 'New Type',
+      color: DEFAULT_COLORS[Math.floor(Math.random() * DEFAULT_COLORS.length)],
+    };
+    setBrandKit(prev => ({
+      ...prev,
+      contentTypes: [...(prev.contentTypes || []), newType]
+    }));
+  };
+
+  const updateContentType = (id: string, updates: Partial<ContentType>) => {
+    setBrandKit(prev => ({
+      ...prev,
+      contentTypes: (prev.contentTypes || []).map(ct =>
+        ct.id === id ? { ...ct, ...updates } : ct
+      )
+    }));
+  };
+
+  const removeContentType = (id: string) => {
+    setBrandKit(prev => ({
+      ...prev,
+      contentTypes: (prev.contentTypes || []).filter(ct => ct.id !== id)
+    }));
+  };
+
+  const moveContentType = (id: string, direction: 'up' | 'down') => {
+    setBrandKit(prev => {
+      const types = [...(prev.contentTypes || [])];
+      const index = types.findIndex(ct => ct.id === id);
+      if (index === -1) return prev;
+
+      const newIndex = direction === 'up' ? index - 1 : index + 1;
+      if (newIndex < 0 || newIndex >= types.length) return prev;
+
+      [types[index], types[newIndex]] = [types[newIndex], types[index]];
+      return { ...prev, contentTypes: types };
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="max-w-6xl mx-auto p-8">
@@ -345,6 +405,139 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Content Types Tab */}
+          {activeTab === 'content-types' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-semibold text-brand-primary">Content Types</h2>
+                  <p className="text-sm text-gray-500">Define the types of content your team creates. These appear in the dashboard for categorizing sessions.</p>
+                </div>
+                <button
+                  onClick={addContentType}
+                  className="bg-brand-accent text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 transition"
+                >
+                  + Add Type
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {(brandKit.contentTypes || []).map((ct, index) => (
+                  <div key={ct.id} className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg bg-white">
+                    {/* Reorder buttons */}
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={() => moveContentType(ct.id, 'up')}
+                        disabled={index === 0}
+                        className="text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed p-0.5"
+                        title="Move up"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => moveContentType(ct.id, 'down')}
+                        disabled={index === (brandKit.contentTypes || []).length - 1}
+                        className="text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed p-0.5"
+                        title="Move down"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Preview badge */}
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${ct.color}`}>
+                      {ct.label}
+                    </span>
+
+                    {/* Label input */}
+                    <div className="flex-1">
+                      <label className="block text-xs text-gray-500 mb-1">Display Name</label>
+                      <input
+                        type="text"
+                        value={ct.label}
+                        onChange={(e) => updateContentType(ct.id, { label: e.target.value })}
+                        placeholder="Blog Post"
+                        className="w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                      />
+                    </div>
+
+                    {/* Value input */}
+                    <div className="w-40">
+                      <label className="block text-xs text-gray-500 mb-1">ID (URL-safe)</label>
+                      <input
+                        type="text"
+                        value={ct.value}
+                        onChange={(e) => updateContentType(ct.id, {
+                          value: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-')
+                        })}
+                        placeholder="blog-post"
+                        className="w-full px-3 py-2 border border-gray-200 rounded text-sm font-mono"
+                      />
+                    </div>
+
+                    {/* Color select */}
+                    <div className="w-48">
+                      <label className="block text-xs text-gray-500 mb-1">Color</label>
+                      <select
+                        value={ct.color}
+                        onChange={(e) => updateContentType(ct.id, { color: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                      >
+                        {DEFAULT_COLORS.map((color) => (
+                          <option key={color} value={color}>
+                            {color.replace('bg-', '').replace('-100 text-', ' / ').replace('-700', '')}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Delete button */}
+                    <button
+                      onClick={() => removeContentType(ct.id)}
+                      className="text-gray-400 hover:text-red-500 p-2 mt-4"
+                      title="Delete"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {(!brandKit.contentTypes || brandKit.contentTypes.length === 0) && (
+                <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
+                  <p>No content types defined</p>
+                  <p className="text-sm mt-1">Add types to categorize your content pipelines</p>
+                  <button
+                    onClick={addContentType}
+                    className="mt-4 text-brand-accent hover:underline text-sm"
+                  >
+                    + Add your first content type
+                  </button>
+                </div>
+              )}
+
+              {/* Preview section */}
+              {brandKit.contentTypes && brandKit.contentTypes.length > 0 && (
+                <div className="border-t border-gray-200 pt-6">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">Preview</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {brandKit.contentTypes.map((ct) => (
+                      <span key={ct.id} className={`px-3 py-1 rounded-full text-sm font-medium ${ct.color}`}>
+                        {ct.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

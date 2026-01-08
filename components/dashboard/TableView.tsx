@@ -3,22 +3,32 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import type { PipelineSession, WorkflowStatus, SessionUser } from '@/types/session';
-import { WORKFLOW_STATUSES, PRIORITY_OPTIONS, STEP_NAMES, STEP_SLUGS } from '@/lib/constants/dashboard';
+import { WORKFLOW_STATUSES, PRIORITY_OPTIONS, STEP_NAMES, STEP_SLUGS, CONTENT_TYPES } from '@/lib/constants/dashboard';
+
+interface ContentTypeOption {
+  value: string;
+  label: string;
+  color: string;
+}
 
 interface TableViewProps {
   sessions: PipelineSession[];
   onUpdateSession: (id: string, updates: Partial<PipelineSession>) => void;
   onDelete: (id: string) => void;
   onDuplicate: (id: string) => void;
+  contentTypes?: ContentTypeOption[];
 }
 
-type SortField = 'title' | 'status' | 'targetDate' | 'createdAt' | 'priority' | 'assignee';
+type SortField = 'title' | 'type' | 'status' | 'targetDate' | 'createdAt' | 'priority' | 'assignee';
 type SortDirection = 'asc' | 'desc';
 
-export function TableView({ sessions, onUpdateSession, onDelete, onDuplicate }: TableViewProps) {
+export function TableView({ sessions, onUpdateSession, onDelete, onDuplicate, contentTypes: propContentTypes }: TableViewProps) {
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [teamMembers, setTeamMembers] = useState<SessionUser[]>([]);
+
+  // Use passed content types or fall back to defaults
+  const types = propContentTypes || CONTENT_TYPES;
 
   // Fetch team members on mount
   useEffect(() => {
@@ -53,6 +63,10 @@ export function TableView({ sessions, onUpdateSession, onDelete, onDuplicate }: 
       case 'title':
         aVal = a.topic.title || a.topic.slug || '';
         bVal = b.topic.title || b.topic.slug || '';
+        break;
+      case 'type':
+        aVal = a.contentType || '';
+        bVal = b.contentType || '';
         break;
       case 'status':
         aVal = a.workflowStatus || 'backlog';
@@ -113,6 +127,12 @@ export function TableView({ sessions, onUpdateSession, onDelete, onDuplicate }: 
               </th>
               <th
                 className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('type')}
+              >
+                Type <SortIcon field="type" />
+              </th>
+              <th
+                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
                 onClick={() => handleSort('status')}
               >
                 Status <SortIcon field="status" />
@@ -165,6 +185,26 @@ export function TableView({ sessions, onUpdateSession, onDelete, onDuplicate }: 
                   {session.notes && (
                     <p className="text-xs text-gray-500 mt-1 truncate max-w-xs">{session.notes}</p>
                   )}
+                </td>
+                <td className="px-4 py-3">
+                  <select
+                    value={session.contentType || ''}
+                    onChange={(e) => onUpdateSession(session.id, {
+                      contentType: e.target.value as PipelineSession['contentType'] || undefined
+                    })}
+                    className={`text-xs px-2 py-1 rounded-full border-0 cursor-pointer ${
+                      session.contentType
+                        ? types.find(t => t.value === session.contentType)?.color
+                        : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    <option value="">No type</option>
+                    {types.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="px-4 py-3">
                   <select

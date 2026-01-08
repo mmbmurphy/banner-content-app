@@ -9,6 +9,7 @@ import { ViewMode, STEP_NAMES, STEP_SLUGS, WORKFLOW_STATUSES, CONTENT_TYPES } fr
 import { TableView } from '@/components/dashboard/TableView';
 import { KanbanView } from '@/components/dashboard/KanbanView';
 import { CalendarView } from '@/components/dashboard/CalendarView';
+import { useBrandKitStore } from '@/lib/store/brand-kit-store';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -22,6 +23,13 @@ export default function Dashboard() {
     setCurrentTeamId,
     isLoading,
   } = usePipelineStore();
+
+  const { brandKit, fetchBrandKit } = useBrandKitStore();
+
+  // Use team content types if available, otherwise use defaults
+  const contentTypes = (brandKit.contentTypes && brandKit.contentTypes.length > 0)
+    ? brandKit.contentTypes.map(ct => ({ value: ct.value, label: ct.label, color: ct.color }))
+    : CONTENT_TYPES;
 
   const [sessions, setSessions] = useState<PipelineSession[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -65,6 +73,9 @@ export default function Dashboard() {
       await fetchSessionsFromApi(teamId);
       refreshSessions();
 
+      // Fetch brand kit for team content types
+      fetchBrandKit();
+
       // Fetch team members for filter
       try {
         const res = await fetch('/api/teams/members');
@@ -78,7 +89,7 @@ export default function Dashboard() {
     }
 
     init();
-  }, [fetchSessionsFromApi, refreshSessions, setCurrentTeamId]);
+  }, [fetchSessionsFromApi, refreshSessions, setCurrentTeamId, fetchBrandKit]);
 
   // Save view preference
   const handleViewChange = (view: ViewMode) => {
@@ -185,7 +196,7 @@ export default function Dashboard() {
           >
             <option value="all">All Types</option>
             <option value="unset">Unset ({sessions.filter(s => !s.contentType).length})</option>
-            {CONTENT_TYPES.map((type) => (
+            {contentTypes.map((type) => (
               <option key={type.value} value={type.value}>
                 {type.label} ({sessions.filter(s => s.contentType === type.value).length})
               </option>
@@ -317,17 +328,18 @@ export default function Dashboard() {
                             }}
                             className={`text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-brand-accent transition ${
                               session.contentType
-                                ? CONTENT_TYPES.find(t => t.value === session.contentType)?.color
+                                ? contentTypes.find(t => t.value === session.contentType)?.color
                                 : 'bg-gray-100 text-gray-500 border border-dashed border-gray-300'
                             }`}
                           >
                             {session.contentType
-                              ? CONTENT_TYPES.find(t => t.value === session.contentType)?.label
+                              ? contentTypes.find(t => t.value === session.contentType)?.label
                               : '+ Type'}
                           </button>
-                          {/* Dropdown */}
-                          <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 hidden group-hover:block min-w-[160px]">
-                            {CONTENT_TYPES.map((type) => (
+                          {/* Dropdown - pt-2 creates invisible bridge to prevent gap */}
+                          <div className="absolute left-0 top-full pt-2 hidden group-hover:block min-w-[160px] z-20">
+                            <div className="bg-white border border-gray-200 rounded-lg shadow-lg">
+                            {contentTypes.map((type) => (
                               <button
                                 key={type.value}
                                 onClick={(e) => {
@@ -350,11 +362,12 @@ export default function Dashboard() {
                                   e.stopPropagation();
                                   handleUpdateSession(session.id, { contentType: undefined });
                                 }}
-                                className="w-full text-left px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-50 border-t border-gray-100"
+                                className="w-full text-left px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-50 border-t border-gray-100 rounded-b-lg"
                               >
                                 Clear type
                               </button>
                             )}
+                            </div>
                           </div>
                         </div>
                         {session.workflowStatus && (
@@ -489,6 +502,7 @@ export default function Dashboard() {
               onUpdateSession={handleUpdateSession}
               onDelete={handleDelete}
               onDuplicate={handleDuplicate}
+              contentTypes={contentTypes}
             />
           )}
 

@@ -67,6 +67,13 @@ export interface BrandVoice {
   dontList: string[]; // Things to avoid
 }
 
+export interface ContentType {
+  id: string;
+  value: string; // URL-safe identifier, e.g., "blog", "case-study"
+  label: string; // Display name, e.g., "Blog Post", "Case Study"
+  color: string; // Tailwind classes, e.g., "bg-purple-100 text-purple-700"
+}
+
 export interface BrandKit {
   id: string;
   name: string; // e.g., "Banner PM Brand Kit"
@@ -92,6 +99,9 @@ export interface BrandKit {
 
   // Brand Voice
   voice?: BrandVoice;
+
+  // Content Types (for categorizing pipeline sessions)
+  contentTypes?: ContentType[];
 
   // Company Info
   companyName?: string;
@@ -154,4 +164,14 @@ export const DEFAULT_BRAND_KIT: BrandKit = {
     doList: ['Use clear, concise language', 'Provide actionable insights', 'Back claims with data'],
     dontList: ['Use jargon without explanation', 'Be overly casual', 'Make unsubstantiated claims'],
   },
+  contentTypes: [
+    { id: 'ct1', value: 'blog', label: 'Blog Post', color: 'bg-purple-100 text-purple-700' },
+    { id: 'ct2', value: 'guide', label: 'Guide', color: 'bg-indigo-100 text-indigo-700' },
+    { id: 'ct3', value: 'case-study', label: 'Case Study', color: 'bg-teal-100 text-teal-700' },
+    { id: 'ct4', value: 'tutorial', label: 'Tutorial', color: 'bg-cyan-100 text-cyan-700' },
+    { id: 'ct5', value: 'thought-leadership', label: 'Thought Leadership', color: 'bg-rose-100 text-rose-700' },
+    { id: 'ct6', value: 'news', label: 'News/Update', color: 'bg-amber-100 text-amber-700' },
+    { id: 'ct7', value: 'listicle', label: 'Listicle', color: 'bg-lime-100 text-lime-700' },
+    { id: 'ct8', value: 'comparison', label: 'Comparison', color: 'bg-orange-100 text-orange-700' },
+  ],
 };
