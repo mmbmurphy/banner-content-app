@@ -66,7 +66,7 @@ async function ensureTablesExist() {
 // GET /api/teams - List teams for current user
 export async function GET() {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return Response.json({ error: 'Not authenticated' }, { status: 401 });
@@ -147,7 +147,7 @@ export async function GET() {
 // POST /api/teams - Create a new team
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return Response.json({ error: 'Not authenticated' }, { status: 401 });

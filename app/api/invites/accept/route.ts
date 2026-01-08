@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 // POST /api/invites/accept - Accept a team invite
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return Response.json({ error: 'Not authenticated' }, { status: 401 });

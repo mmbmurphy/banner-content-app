@@ -28,7 +28,7 @@ export async function GET(
   { params }: { params: { teamId: string } }
 ) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return Response.json({ error: 'Not authenticated' }, { status: 401 });
@@ -124,7 +124,7 @@ export async function PUT(
   { params }: { params: { teamId: string } }
 ) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return Response.json({ error: 'Not authenticated' }, { status: 401 });
@@ -165,7 +165,7 @@ export async function DELETE(
   { params }: { params: { teamId: string } }
 ) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return Response.json({ error: 'Not authenticated' }, { status: 401 });

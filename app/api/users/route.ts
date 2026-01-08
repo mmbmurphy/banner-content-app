@@ -23,7 +23,7 @@ async function ensureTableExists() {
 // GET /api/users - Get current user
 export async function GET() {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return Response.json({ error: 'Not authenticated' }, { status: 401 });

@@ -44,7 +44,7 @@ async function getUserTeam(userId: string) {
 // GET /api/sessions - List sessions for user's team
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     const { searchParams } = new URL(request.url);
     const teamId = searchParams.get('teamId');
 
@@ -186,7 +186,7 @@ export async function GET(request: Request) {
 // POST /api/sessions - Create new session
 export async function POST(request: Request) {
   try {
-    const authSession = await getServerSession();
+    const authSession = await getServerSession(authOptions);
     const body = await request.json();
     const sessionId = body.id || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 

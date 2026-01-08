@@ -43,7 +43,7 @@ async function getUserTeam(userId: string) {
 // GET /api/brand-kit - Get the brand kit for user's team
 export async function GET() {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     let teamId: string | null = null;
 
     // Get user's team if authenticated
@@ -136,7 +136,7 @@ export async function GET() {
 // PUT /api/brand-kit - Update the brand kit for user's team
 export async function PUT(request: Request) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return Response.json({ error: 'Not authenticated' }, { status: 401 });

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/teams/members - Get members of user's current team
 export async function GET() {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return Response.json({ error: 'Not authenticated' }, { status: 401 });

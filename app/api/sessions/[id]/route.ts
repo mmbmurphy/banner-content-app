@@ -48,7 +48,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const authSession = await getServerSession();
+    const authSession = await getServerSession(authOptions);
 
     // Get session from database
     const { rows } = await sql`
@@ -126,7 +126,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const authSession = await getServerSession();
+    const authSession = await getServerSession(authOptions);
     const updates: Partial<PipelineSession> = await request.json();
 
     // Get existing session first
@@ -193,7 +193,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const authSession = await getServerSession();
+    const authSession = await getServerSession(authOptions);
 
     // Get session first to check authorization
     const { rows } = await sql`

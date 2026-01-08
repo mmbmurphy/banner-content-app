@@ -30,7 +30,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const authSession = await getServerSession();
+    const authSession = await getServerSession(authOptions);
 
     // Get the original session with team info
     const { rows } = await sql`
