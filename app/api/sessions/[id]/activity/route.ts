@@ -1,5 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import type { Activity, ActivityType } from '@/types/collaboration';
 
 export const dynamic = 'force-dynamic';

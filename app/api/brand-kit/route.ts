@@ -1,5 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { DEFAULT_BRAND_KIT } from '@/types/brand';
 import type { BrandKit } from '@/types/brand';
 

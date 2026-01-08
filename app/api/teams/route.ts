@@ -1,5 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import type { Team, TeamMember, TeamRole } from '@/types/team';
 
 export const dynamic = 'force-dynamic';
