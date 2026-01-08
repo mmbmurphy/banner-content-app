@@ -4,6 +4,9 @@ import { useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { usePipelineStore } from '@/lib/store/session-store';
 import type { CarouselSlide } from '@/types/session';
+import { VersionHistory, saveVersion } from '@/components/pipeline/VersionHistory';
+import { SessionNotes } from '@/components/pipeline/SessionNotes';
+import { CollaborationPanel } from '@/components/collaboration';
 
 // Brand colors for carousel
 const BRAND = {
@@ -38,6 +41,7 @@ export default function Step4Carousel() {
   const [generatedImages, setGeneratedImages] = useState<string[]>(session?.carousel.imageUrls || []);
   const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
   const [carouselPrompt, setCarouselPrompt] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Regenerate carousel content with AI
@@ -93,6 +97,13 @@ export default function Step4Carousel() {
           cta_slide: data.cta_slide,
         },
       });
+
+      // Save version for history
+      saveVersion(sessionId, 'carousel', {
+        hook: data.hook,
+        slides: data.slides,
+        cta_slide: data.cta_slide,
+      }, carouselPrompt);
 
       setCarouselPrompt('');
     } catch (err) {
@@ -294,6 +305,26 @@ export default function Step4Carousel() {
     router.push(`/pipeline/${sessionId}/step-3-linkedin`);
   };
 
+  // Restore from version history
+  const handleRestoreVersion = (versionContent: unknown) => {
+    const restored = versionContent as {
+      hook: string;
+      slides: CarouselSlide[];
+      cta_slide?: { headline: string; url: string };
+    };
+    setHook(restored.hook || '');
+    setSlides(restored.slides || []);
+    if (restored.cta_slide) {
+      setCtaSlide(restored.cta_slide);
+    }
+    setGeneratedImages([]); // Clear images since content changed
+    updateStepData(sessionId, 'carousel', {
+      slides: restored.slides,
+      imageUrls: [],
+      status: 'pending',
+    });
+  };
+
   return (
     <div className="max-w-5xl mx-auto">
       <canvas ref={canvasRef} className="hidden" />
@@ -307,6 +338,11 @@ export default function Step4Carousel() {
             Edit slides and generate carousel images
           </p>
         </div>
+      </div>
+
+      {/* Session Notes */}
+      <div className="mb-6">
+        <SessionNotes sessionId={sessionId} compact />
       </div>
 
       {/* Error Display */}
@@ -489,6 +525,18 @@ export default function Step4Carousel() {
             Download All
           </button>
         )}
+
+        {slides.length > 0 && (
+          <button
+            onClick={() => setShowHistory(true)}
+            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-200 transition flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            History
+          </button>
+        )}
       </div>
 
       {/* Image Preview */}
@@ -534,6 +582,24 @@ export default function Step4Carousel() {
           <span>→</span>
         </button>
       </div>
+
+      {/* Collaboration Panel */}
+      <div className="mt-8">
+        <CollaborationPanel
+          sessionId={sessionId}
+          sessionTitle={session?.topic.title || 'Untitled'}
+          currentStep={4}
+        />
+      </div>
+
+      {/* Version History Modal */}
+      <VersionHistory
+        sessionId={sessionId}
+        step="carousel"
+        onRestore={handleRestoreVersion}
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+      />
     </div>
   );
 }

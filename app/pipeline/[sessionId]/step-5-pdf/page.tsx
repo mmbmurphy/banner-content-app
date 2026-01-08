@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { usePipelineStore } from '@/lib/store/session-store';
 import { jsPDF } from 'jspdf';
+import { CollaborationPanel } from '@/components/collaboration';
 
 export default function Step5PDF() {
   const params = useParams();
@@ -225,6 +226,15 @@ export default function Step5PDF() {
           Continue to Export
           <span>→</span>
         </button>
+      </div>
+
+      {/* Collaboration Panel */}
+      <div className="mt-8">
+        <CollaborationPanel
+          sessionId={sessionId}
+          sessionTitle={session?.topic.title || 'Untitled'}
+          currentStep={5}
+        />
       </div>
     </div>
   );

@@ -10,16 +10,23 @@ export default function Step1Topic() {
   const router = useRouter();
   const sessionId = params.sessionId as string;
 
-  const { loadSession, updateStepData, setCurrentStep } = usePipelineStore();
+  const { loadSession, updateStepData, updateSession, setCurrentStep } = usePipelineStore();
   const session = loadSession(sessionId);
 
   const [source, setSource] = useState<'queue' | 'custom'>(session?.topic.source || 'custom');
   const [title, setTitle] = useState(session?.topic.title || '');
   const [slug, setSlug] = useState(session?.topic.slug || '');
   const [outline, setOutline] = useState(session?.topic.outline || '');
+  const [notes, setNotes] = useState(session?.notes || '');
   const [queueItems, setQueueItems] = useState<ContentQueueItem[]>([]);
   const [selectedQueueItem, setSelectedQueueItem] = useState<ContentQueueItem | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Save notes when they change (debounced)
+  const handleNotesChange = (value: string) => {
+    setNotes(value);
+    updateSession(sessionId, { notes: value });
+  };
 
   // Load queue items on mount
   useEffect(() => {
@@ -71,6 +78,23 @@ export default function Step1Topic() {
       <p className="text-gray-500 mb-8">
         Choose a topic from the queue or enter a custom topic
       </p>
+
+      {/* Session Notes */}
+      <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-4 mb-6">
+        <label className="block text-sm font-medium text-yellow-800 mb-2">
+          Session Notes (for your reference)
+        </label>
+        <textarea
+          value={notes}
+          onChange={(e) => handleNotesChange(e.target.value)}
+          placeholder="Add any notes about this content piece - reminders, context, feedback from team..."
+          rows={2}
+          className="w-full px-4 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent text-sm bg-white"
+        />
+        <p className="text-xs text-yellow-700 mt-1">
+          These notes are saved automatically and visible on all steps.
+        </p>
+      </div>
 
       {/* Source Toggle */}
       <div className="flex gap-2 mb-6">

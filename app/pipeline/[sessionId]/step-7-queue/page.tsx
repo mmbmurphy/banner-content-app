@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { usePipelineStore } from '@/lib/store/session-store';
 import type { LinkedInPost } from '@/types/session';
+import { CollaborationPanel } from '@/components/collaboration';
 
 export default function Step7Queue() {
   const params = useParams();
@@ -256,6 +257,15 @@ export default function Step7Queue() {
           Finish
           <span>→</span>
         </button>
+      </div>
+
+      {/* Collaboration Panel */}
+      <div className="mt-8">
+        <CollaborationPanel
+          sessionId={sessionId}
+          sessionTitle={session?.topic.title || 'Untitled'}
+          currentStep={7}
+        />
       </div>
     </div>
   );

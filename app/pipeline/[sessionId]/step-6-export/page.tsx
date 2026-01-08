@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { usePipelineStore } from '@/lib/store/session-store';
+import { CollaborationPanel } from '@/components/collaboration';
 
 export default function Step6Export() {
   const params = useParams();
@@ -276,6 +277,15 @@ export default function Step6Export() {
           Continue to Queue
           <span>→</span>
         </button>
+      </div>
+
+      {/* Collaboration Panel */}
+      <div className="mt-8">
+        <CollaborationPanel
+          sessionId={sessionId}
+          sessionTitle={session?.topic.title || 'Untitled'}
+          currentStep={6}
+        />
       </div>
     </div>
   );

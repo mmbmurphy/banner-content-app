@@ -43,11 +43,41 @@ export interface CarouselData {
   };
 }
 
+export type WorkflowStatus = 'backlog' | 'in_progress' | 'review' | 'published' | 'archived';
+
+export type ContentType = 'blog' | 'guide' | 'case-study' | 'tutorial' | 'thought-leadership' | 'news' | 'listicle' | 'comparison';
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string | null;
+  image: string | null;
+}
+
+// Alias for backwards compatibility
+export type SessionCreator = SessionUser;
+
 export interface PipelineSession {
   id: string;
   createdAt: string;
   currentStep: number;
   status: 'in_progress' | 'completed' | 'failed';
+  notes?: string; // User notes for this session
+
+  // Team tracking
+  teamId?: string;
+  createdBy?: string; // User ID
+  creator?: SessionCreator; // Populated user info
+  assignedTo?: string; // User ID
+  assignee?: SessionUser; // Populated user info
+
+  // Workflow tracking
+  workflowStatus?: WorkflowStatus;
+  contentType?: ContentType;
+  targetDate?: string; // ISO date string for planned publish date
+  completedDate?: string; // ISO date string for actual completion
+  priority?: 'low' | 'medium' | 'high';
+  tags?: string[];
 
   // Step 1: Topic
   topic: {

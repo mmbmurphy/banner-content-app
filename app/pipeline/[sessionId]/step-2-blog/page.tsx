@@ -4,6 +4,9 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { usePipelineStore } from '@/lib/store/session-store';
 import { marked } from 'marked';
+import { VersionHistory, saveVersion } from '@/components/pipeline/VersionHistory';
+import { SessionNotes } from '@/components/pipeline/SessionNotes';
+import { CollaborationPanel } from '@/components/collaboration';
 
 export default function Step2Blog() {
   const params = useParams();
@@ -26,6 +29,7 @@ export default function Step2Blog() {
     url?: string;
     message?: string;
   } | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Generate blog content from Claude (streaming)
   const handleGenerate = async () => {
@@ -126,6 +130,12 @@ export default function Step2Blog() {
         frontmatter: parsedFrontmatter,
         htmlContent: marked(markdownContent) as string,
       });
+
+      // Save version for history
+      saveVersion(sessionId, 'blog', {
+        content: markdownContent,
+        frontmatter: parsedFrontmatter,
+      }, customPrompt || session.topic.outline);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate blog');
       setErrorDetails('Network error or server unavailable. Check browser console for details.');
@@ -209,6 +219,18 @@ export default function Step2Blog() {
     router.push(`/pipeline/${sessionId}/step-1-topic`);
   };
 
+  // Restore from version history
+  const handleRestoreVersion = (versionContent: unknown) => {
+    const restored = versionContent as { content: string; frontmatter: Record<string, unknown> };
+    setContent(restored.content || '');
+    setFrontmatter(restored.frontmatter || {});
+    updateStepData(sessionId, 'blog', {
+      content: restored.content,
+      frontmatter: restored.frontmatter,
+      htmlContent: marked(restored.content || '') as string,
+    });
+  };
+
   const htmlPreview = marked(content) as string;
 
   return (
@@ -230,6 +252,11 @@ export default function Step2Blog() {
             {session?.topic.title || 'No topic selected'}
           </p>
         </div>
+      </div>
+
+      {/* Session Notes */}
+      <div className="mb-6">
+        <SessionNotes sessionId={sessionId} compact />
       </div>
 
       {/* Error Display */}
@@ -296,22 +323,34 @@ export default function Step2Blog() {
         </button>
 
         {content && (
-          <button
-            onClick={handlePublish}
-            disabled={isPublishing}
-            className="bg-brand-green text-white px-4 py-2 rounded-lg font-medium hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {isPublishing ? (
-              <>
-                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                Publishing...
-              </>
-            ) : session?.blog.status === 'published' ? (
-              'Update on Webflow'
-            ) : (
-              'Publish to Webflow'
-            )}
-          </button>
+          <>
+            <button
+              onClick={handlePublish}
+              disabled={isPublishing}
+              className="bg-brand-green text-white px-4 py-2 rounded-lg font-medium hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isPublishing ? (
+                <>
+                  <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                  Publishing...
+                </>
+              ) : session?.blog.status === 'published' ? (
+                'Update on Webflow'
+              ) : (
+                'Publish to Webflow'
+              )}
+            </button>
+
+            <button
+              onClick={() => setShowHistory(true)}
+              className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-200 transition flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              History
+            </button>
+          </>
         )}
       </div>
 
@@ -415,6 +454,24 @@ export default function Step2Blog() {
           <span>→</span>
         </button>
       </div>
+
+      {/* Collaboration Panel */}
+      <div className="mt-8">
+        <CollaborationPanel
+          sessionId={sessionId}
+          sessionTitle={session?.topic.title || 'Untitled'}
+          currentStep={2}
+        />
+      </div>
+
+      {/* Version History Modal */}
+      <VersionHistory
+        sessionId={sessionId}
+        step="blog"
+        onRestore={handleRestoreVersion}
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+      />
     </div>
   );
 }

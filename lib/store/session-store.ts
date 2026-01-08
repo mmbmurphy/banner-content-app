@@ -10,12 +10,13 @@ function generateSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-function createEmptySession(id: string): PipelineSession {
+function createEmptySession(id: string, teamId?: string): PipelineSession {
   return {
     id,
     createdAt: new Date().toISOString(),
     currentStep: 1,
     status: 'in_progress',
+    teamId,
     topic: { source: 'custom', slug: '', title: '' },
     blog: {
       frontmatter: {},
@@ -57,26 +58,35 @@ function cleanExpiredSessions(sessions: Record<string, PipelineSession>): Record
 // API helpers for database persistence
 async function syncToApi(sessionId: string, data: Partial<PipelineSession>) {
   try {
-    await fetch(`/api/sessions/${sessionId}`, {
+    const res = await fetch(`/api/sessions/${sessionId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
+    if (!res.ok) {
+      console.error('Failed to sync session to API:', await res.text());
+    }
   } catch (error) {
     console.error('Failed to sync session to API:', error);
   }
 }
 
-async function createSessionInApi(session: PipelineSession) {
+async function createSessionInApi(session: PipelineSession): Promise<PipelineSession | null> {
   try {
-    await fetch('/api/sessions', {
+    const res = await fetch('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(session),
     });
+    if (res.ok) {
+      const data = await res.json();
+      return data.session;
+    }
+    console.error('Failed to create session in API:', await res.text());
   } catch (error) {
     console.error('Failed to create session in API:', error);
   }
+  return null;
 }
 
 async function deleteSessionFromApi(sessionId: string) {
@@ -92,11 +102,12 @@ async function deleteSessionFromApi(sessionId: string) {
 interface PipelineStore {
   sessions: Record<string, PipelineSession>;
   currentSessionId: string | null;
+  currentTeamId: string | null;
   isLoading: boolean;
   apiInitialized: boolean;
 
   // Actions
-  createSession: () => string;
+  createSession: () => Promise<string>;
   loadSession: (id: string) => PipelineSession | null;
   loadSessionFromApi: (id: string) => Promise<PipelineSession | null>;
   updateSession: (id: string, updates: Partial<PipelineSession>) => void;
@@ -107,9 +118,12 @@ interface PipelineStore {
   ) => void;
   setCurrentStep: (id: string, step: number) => void;
   setCurrentSessionId: (id: string | null) => void;
+  setCurrentTeamId: (teamId: string | null) => void;
   deleteSession: (id: string) => void;
+  duplicateSession: (id: string) => Promise<string | null>;
   getAllSessions: () => PipelineSession[];
-  fetchSessionsFromApi: () => Promise<void>;
+  getTeamSessions: () => PipelineSession[];
+  fetchSessionsFromApi: (teamId?: string | null) => Promise<void>;
   setApiInitialized: (initialized: boolean) => void;
 }
 
@@ -118,22 +132,28 @@ export const usePipelineStore = create<PipelineStore>()(
     (set, get) => ({
       sessions: {},
       currentSessionId: null,
+      currentTeamId: null,
       isLoading: false,
       apiInitialized: false,
 
-      createSession: () => {
+      createSession: async () => {
         const id = generateSessionId();
-        const newSession = createEmptySession(id);
+        const { currentTeamId } = get();
+        const newSession = createEmptySession(id, currentTeamId || undefined);
+
+        // Create in API first to get proper team assignment
+        const apiSession = await createSessionInApi(newSession);
+
+        // Use API response if available (has proper team info)
+        const sessionToStore = apiSession || newSession;
+
         set(state => ({
           sessions: {
             ...cleanExpiredSessions(state.sessions),
-            [id]: newSession
+            [id]: sessionToStore
           },
           currentSessionId: id,
         }));
-
-        // Sync to API in background
-        createSessionInApi(newSession);
 
         return id;
       },
@@ -241,6 +261,10 @@ export const usePipelineStore = create<PipelineStore>()(
         set({ currentSessionId: id });
       },
 
+      setCurrentTeamId: (teamId: string | null) => {
+        set({ currentTeamId: teamId });
+      },
+
       deleteSession: (id: string) => {
         set(state => {
           const { [id]: _, ...rest } = state.sessions;
@@ -254,6 +278,32 @@ export const usePipelineStore = create<PipelineStore>()(
         deleteSessionFromApi(id);
       },
 
+      duplicateSession: async (id: string) => {
+        try {
+          const res = await fetch(`/api/sessions/${id}/duplicate`, {
+            method: 'POST',
+          });
+          if (!res.ok) {
+            console.error('Failed to duplicate session');
+            return null;
+          }
+          const data = await res.json();
+          if (data.session) {
+            // Add to local store
+            set(state => ({
+              sessions: {
+                ...state.sessions,
+                [data.newId]: data.session,
+              },
+            }));
+            return data.newId;
+          }
+        } catch (error) {
+          console.error('Failed to duplicate session:', error);
+        }
+        return null;
+      },
+
       getAllSessions: () => {
         const { sessions } = get();
         return Object.values(cleanExpiredSessions(sessions)).sort(
@@ -261,26 +311,63 @@ export const usePipelineStore = create<PipelineStore>()(
         );
       },
 
-      fetchSessionsFromApi: async () => {
+      // Get sessions filtered by current team
+      getTeamSessions: () => {
+        const { sessions, currentTeamId } = get();
+        const cleaned = cleanExpiredSessions(sessions);
+
+        // If no team context, return empty array (safer than showing all)
+        if (!currentTeamId) {
+          return [];
+        }
+
+        return Object.values(cleaned)
+          .filter(s => s.teamId === currentTeamId)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      },
+
+      fetchSessionsFromApi: async (teamId?: string | null) => {
         set({ isLoading: true });
         try {
-          const res = await fetch('/api/sessions');
+          // Use passed teamId if provided, otherwise fall back to state
+          // This fixes the race condition where state may not be updated yet
+          const effectiveTeamId = teamId !== undefined ? teamId : get().currentTeamId;
+          const url = new URL('/api/sessions', window.location.origin);
+          if (effectiveTeamId) {
+            url.searchParams.set('teamId', effectiveTeamId);
+          }
+
+          const res = await fetch(url.toString());
           if (res.ok) {
             const data = await res.json();
             if (data.sessions && Array.isArray(data.sessions)) {
-              // Merge API sessions with local sessions
+              // IMPORTANT: Replace local sessions with API sessions for the current team
+              // This ensures team members see the same sessions
               const apiSessions: Record<string, PipelineSession> = {};
               for (const session of data.sessions) {
                 apiSessions[session.id] = session;
               }
 
-              set(state => ({
-                sessions: {
-                  ...state.sessions,
-                  ...apiSessions, // API sessions take precedence
-                },
-                apiInitialized: !data.needsInit,
-              }));
+              set(state => {
+                // Keep local sessions that are NOT in the current team
+                // (they might be from a different team or offline sessions)
+                const localOnlySessions: Record<string, PipelineSession> = {};
+                for (const [id, session] of Object.entries(state.sessions)) {
+                  // Keep if not in API response AND not in current team
+                  // (to preserve any pending offline sessions from other teams)
+                  if (!apiSessions[id] && session.teamId !== effectiveTeamId) {
+                    localOnlySessions[id] = session;
+                  }
+                }
+
+                return {
+                  sessions: {
+                    ...localOnlySessions,
+                    ...apiSessions, // API sessions take precedence
+                  },
+                  apiInitialized: !data.needsInit,
+                };
+              });
             }
           }
         } catch (error) {

@@ -4,6 +4,9 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { usePipelineStore } from '@/lib/store/session-store';
 import type { LinkedInPost, CarouselData } from '@/types/session';
+import { VersionHistory, saveVersion } from '@/components/pipeline/VersionHistory';
+import { SessionNotes } from '@/components/pipeline/SessionNotes';
+import { CollaborationPanel } from '@/components/collaboration';
 
 export default function Step3LinkedIn() {
   const params = useParams();
@@ -22,6 +25,7 @@ export default function Step3LinkedIn() {
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
   const [postPrompts, setPostPrompts] = useState<Record<string, string>>({});
+  const [showHistory, setShowHistory] = useState(false);
 
   // Generate LinkedIn content from Claude
   const handleGenerate = async () => {
@@ -71,6 +75,12 @@ export default function Step3LinkedIn() {
         carousel: data.carousel,
         regenerationCount: (session.linkedin.regenerationCount || 0) + 1,
       });
+
+      // Save version for history
+      saveVersion(sessionId, 'linkedin', {
+        posts: data.posts,
+        carousel: data.carousel,
+      }, customPrompt);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate content');
       setErrorDetails('Network error or server unavailable. Check browser console for details.');
@@ -186,6 +196,17 @@ export default function Step3LinkedIn() {
     router.push(`/pipeline/${sessionId}/step-2-blog`);
   };
 
+  // Restore from version history
+  const handleRestoreVersion = (versionContent: unknown) => {
+    const restored = versionContent as { posts: LinkedInPost[]; carousel: Partial<CarouselData> };
+    setPosts(restored.posts || []);
+    setCarousel(restored.carousel || {});
+    updateStepData(sessionId, 'linkedin', {
+      posts: restored.posts,
+      carousel: restored.carousel,
+    });
+  };
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex justify-between items-start mb-6">
@@ -204,6 +225,11 @@ export default function Step3LinkedIn() {
             {session?.topic.title || 'No topic selected'}
           </p>
         </div>
+      </div>
+
+      {/* Session Notes */}
+      <div className="mb-6">
+        <SessionNotes sessionId={sessionId} compact />
       </div>
 
       {/* Error Display */}
@@ -251,6 +277,18 @@ export default function Step3LinkedIn() {
             'Generate LinkedIn Content'
           )}
         </button>
+
+        {posts.length > 0 && (
+          <button
+            onClick={() => setShowHistory(true)}
+            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-200 transition flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            History
+          </button>
+        )}
       </div>
 
       {/* Posts Section */}
@@ -426,6 +464,24 @@ export default function Step3LinkedIn() {
           <span>→</span>
         </button>
       </div>
+
+      {/* Collaboration Panel */}
+      <div className="mt-8">
+        <CollaborationPanel
+          sessionId={sessionId}
+          sessionTitle={session?.topic.title || 'Untitled'}
+          currentStep={3}
+        />
+      </div>
+
+      {/* Version History Modal */}
+      <VersionHistory
+        sessionId={sessionId}
+        step="linkedin"
+        onRestore={handleRestoreVersion}
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+      />
     </div>
   );
 }
