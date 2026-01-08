@@ -56,28 +56,35 @@ export function RequestReviewModal({
 
     setSending(true);
     try {
+      const payload = {
+        reviewerId: selectedReviewer,
+        step: currentStep,
+        note: note.trim() || undefined,
+      };
+      console.log('Sending review request:', { sessionId, payload });
+
       const res = await fetch(`/api/sessions/${sessionId}/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reviewerId: selectedReviewer,
-          step: currentStep,
-          note: note.trim() || undefined,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
-      if (data.success) {
+      console.log('Review response:', { status: res.status, data });
+
+      if (res.ok && data.success) {
         onSuccess?.();
         onClose();
         setNote('');
         setSelectedReviewer('');
       } else {
-        alert(data.error || 'Failed to request review');
+        const errorMsg = data.details || data.error || 'Failed to request review';
+        console.error('Review request failed:', errorMsg);
+        alert(`Failed to create review request: ${errorMsg}`);
       }
     } catch (err) {
       console.error('Error requesting review:', err);
-      alert('Failed to request review');
+      alert(`Failed to request review: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setSending(false);
     }
