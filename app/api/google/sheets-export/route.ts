@@ -104,13 +104,15 @@ async function createJWT(credentials: { client_email: string; private_key: strin
   const payloadB64 = btoa(JSON.stringify(payload));
   const message = `${headerB64}.${payloadB64}`;
 
-  // Import private key
+  // Import private key - handle both literal \n and actual newlines
   const pemContents = credentials.private_key
     .replace('-----BEGIN PRIVATE KEY-----', '')
     .replace('-----END PRIVATE KEY-----', '')
-    .replace(/\s/g, '');
+    .replace(/\\n/g, '')  // Remove literal \n strings
+    .replace(/\s/g, '');  // Remove any whitespace
 
-  const binaryKey = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
+  // Use Buffer.from instead of atob for Node.js compatibility
+  const binaryKey = new Uint8Array(Buffer.from(pemContents, 'base64'));
 
   const key = await crypto.subtle.importKey(
     'pkcs8',

@@ -41,13 +41,9 @@ export async function POST(request: Request) {
 
     const { access_token } = await tokenResponse.json();
 
-    // Convert data URL to blob
+    // Convert data URL to blob - use Buffer.from for Node.js compatibility
     const base64Data = pdfDataUrl.split(',')[1];
-    const binaryData = atob(base64Data);
-    const bytes = new Uint8Array(binaryData.length);
-    for (let i = 0; i < binaryData.length; i++) {
-      bytes[i] = binaryData.charCodeAt(i);
-    }
+    const bytes = Buffer.from(base64Data, 'base64');
 
     // Create file metadata
     const metadata = {
@@ -125,13 +121,15 @@ async function createJWT(credentials: { client_email: string; private_key: strin
   const payloadB64 = btoa(JSON.stringify(payload));
   const message = `${headerB64}.${payloadB64}`;
 
-  // Import private key
+  // Import private key - handle both literal \n and actual newlines
   const pemContents = credentials.private_key
     .replace('-----BEGIN PRIVATE KEY-----', '')
     .replace('-----END PRIVATE KEY-----', '')
-    .replace(/\s/g, '');
+    .replace(/\\n/g, '')  // Remove literal \n strings
+    .replace(/\s/g, '');  // Remove any whitespace
 
-  const binaryKey = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
+  // Use Buffer.from instead of atob for better compatibility
+  const binaryKey = new Uint8Array(Buffer.from(pemContents, 'base64'));
 
   const key = await crypto.subtle.importKey(
     'pkcs8',
