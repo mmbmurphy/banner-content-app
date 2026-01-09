@@ -46,13 +46,12 @@ export default function Step5PDF() {
         doc.addImage(images[i], 'PNG', 0, 0, 1080, 1080);
       }
 
-      // Generate blob URL
-      const pdfBlob = doc.output('blob');
-      const url = URL.createObjectURL(pdfBlob);
-      setPdfUrl(url);
+      // Generate data URL (base64) for persistence and upload
+      const pdfDataUrl = doc.output('dataurlstring');
+      setPdfUrl(pdfDataUrl);
 
       updateStepData(sessionId, 'pdf', {
-        pdfUrl: url,
+        pdfUrl: pdfDataUrl,
         status: 'generated',
       });
     } catch (err) {
