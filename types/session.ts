@@ -1,3 +1,5 @@
+import type { LayeredSlide } from './carousel-layers';
+
 export interface BlogFrontmatter {
   title: string;
   description: string;
@@ -107,6 +109,7 @@ export interface PipelineSession {
   // Step 4: Carousel Images
   carousel: {
     slides: CarouselSlide[];
+    layeredSlides?: LayeredSlide[];
     imageUrls: string[];
     status: 'pending' | 'generating' | 'complete';
   };

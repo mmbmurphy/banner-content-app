@@ -1,9 +1,21 @@
+import type { SlideTemplate } from './carousel-layers';
+
 export interface BrandLogo {
   id: string;
   name: string; // e.g., "Primary Logo", "Icon", "White Version"
   url: string;
   type: 'primary' | 'secondary' | 'icon' | 'wordmark' | 'white' | 'dark' | 'other';
   format?: string; // png, svg, etc.
+}
+
+// Carousel-specific assets (overlays, watermarks, badges)
+export interface CarouselAsset {
+  id: string;
+  name: string;
+  url: string;
+  type: 'overlay' | 'icon' | 'badge' | 'watermark';
+  defaultPosition?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+  description?: string;
 }
 
 export interface BrandColor {
@@ -94,8 +106,14 @@ export interface BrandKit {
   // Social Profiles
   socialProfiles: BrandSocialProfile[];
 
-  // Carousel Templates
+  // Carousel Templates (color presets)
   carouselTemplates: CarouselTemplate[];
+
+  // Carousel Assets (overlays, badges, watermarks)
+  carouselAssets?: CarouselAsset[];
+
+  // Custom Slide Templates (saved layer layouts)
+  customSlideTemplates?: SlideTemplate[];
 
   // Brand Voice
   voice?: BrandVoice;

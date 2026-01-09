@@ -12,6 +12,7 @@ interface BrandKitStore {
   lastFetch: number;
   isSaving: boolean;
   saveStatus: 'idle' | 'saved' | 'error';
+  errorMessage: string | null;
 
   // Actions
   fetchBrandKit: () => Promise<void>;
@@ -33,6 +34,7 @@ export const useBrandKitStore = create<BrandKitStore>()(
       lastFetch: 0,
       isSaving: false,
       saveStatus: 'idle',
+      errorMessage: null,
 
       fetchBrandKit: async () => {
         const state = get();
@@ -68,7 +70,7 @@ export const useBrandKitStore = create<BrandKitStore>()(
       },
 
       saveBrandKit: async (brandKit: BrandKit) => {
-        set({ isSaving: true, saveStatus: 'idle' });
+        set({ isSaving: true, saveStatus: 'idle', errorMessage: null });
         try {
           const res = await fetch('/api/brand-kit', {
             method: 'PUT',
@@ -76,13 +78,15 @@ export const useBrandKitStore = create<BrandKitStore>()(
             body: JSON.stringify(brandKit),
           });
 
+          const data = await res.json();
+
           if (res.ok) {
-            const data = await res.json();
             set({
               brandKit: data.brandKit || brandKit,
               lastFetch: Date.now(),
               isSaving: false,
               saveStatus: 'saved',
+              errorMessage: null,
             });
 
             // Reset save status after 2 seconds
@@ -92,12 +96,15 @@ export const useBrandKitStore = create<BrandKitStore>()(
 
             return true;
           } else {
-            set({ isSaving: false, saveStatus: 'error' });
+            const errorMsg = data.error || data.details || 'Failed to save';
+            console.error('Brand kit save error:', errorMsg);
+            set({ isSaving: false, saveStatus: 'error', errorMessage: errorMsg });
             return false;
           }
         } catch (error) {
           console.error('Failed to save brand kit:', error);
-          set({ isSaving: false, saveStatus: 'error' });
+          const errorMsg = error instanceof Error ? error.message : 'Network error';
+          set({ isSaving: false, saveStatus: 'error', errorMessage: errorMsg });
           return false;
         }
       },

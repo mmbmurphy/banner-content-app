@@ -138,19 +138,22 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const session = await getServerSession(authOptions);
+    console.log('Brand kit save - session:', session ? `User: ${session.user?.email}` : 'NO SESSION');
 
     if (!session?.user?.email) {
-      return Response.json({ error: 'Not authenticated' }, { status: 401 });
+      return Response.json({ error: 'Not authenticated. Please sign in again.' }, { status: 401 });
     }
 
     const user = await getCurrentUser(session.user.email);
+    console.log('Brand kit save - user lookup:', user ? `Found: ${user.id}` : 'NOT FOUND');
     if (!user) {
-      return Response.json({ error: 'User not found' }, { status: 404 });
+      return Response.json({ error: `User not found for email: ${session.user.email}` }, { status: 404 });
     }
 
     const team = await getUserTeam(user.id);
+    console.log('Brand kit save - team lookup:', team ? `Found: ${team.id}` : 'NOT FOUND');
     if (!team) {
-      return Response.json({ error: 'No team found. Create a team first.' }, { status: 400 });
+      return Response.json({ error: 'No team found. Go to Dashboard and create a team first.' }, { status: 400 });
     }
 
     const brandKit: BrandKit = await request.json();
