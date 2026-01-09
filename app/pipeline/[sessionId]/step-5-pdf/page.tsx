@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { usePipelineStore } from '@/lib/store/session-store';
 import { jsPDF } from 'jspdf';
@@ -15,8 +15,12 @@ export default function Step5PDF() {
   const session = loadSession(sessionId);
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(session?.pdf.pdfUrl || null);
+  // Keep PDF in memory only (too large for localStorage)
+  const pdfDataRef = useRef<string | null>(null);
+  const [pdfGenerated, setPdfGenerated] = useState(false);
+  const [driveUrl, setDriveUrl] = useState<string | null>(session?.pdf.driveUrl || null);
 
   // Generate PDF from carousel images
   const handleGeneratePDF = async () => {
@@ -46,12 +50,12 @@ export default function Step5PDF() {
         doc.addImage(images[i], 'PNG', 0, 0, 1080, 1080);
       }
 
-      // Generate data URL (base64) for persistence and upload
-      const pdfDataUrl = doc.output('dataurlstring');
-      setPdfUrl(pdfDataUrl);
+      // Keep PDF data in memory (not localStorage - too large)
+      pdfDataRef.current = doc.output('dataurlstring');
+      setPdfGenerated(true);
 
+      // Mark as generated (but don't store the actual PDF data)
       updateStepData(sessionId, 'pdf', {
-        pdfUrl: pdfDataUrl,
         status: 'generated',
       });
     } catch (err) {
@@ -61,23 +65,64 @@ export default function Step5PDF() {
     }
   };
 
+  // Upload PDF to Google Drive
+  const handleUploadToDrive = async () => {
+    if (!pdfDataRef.current) {
+      setError('Please generate PDF first');
+      return;
+    }
+
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/google/drive-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pdfDataUrl: pdfDataRef.current,
+          fileName: `${session?.topic.slug || 'carousel'}-carousel.pdf`,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to upload to Drive');
+      }
+
+      setDriveUrl(data.driveUrl);
+
+      // Store only the Drive URL (small string, fits in localStorage)
+      updateStepData(sessionId, 'pdf', {
+        status: 'uploaded',
+        driveUrl: data.driveUrl,
+      });
+
+      // Also update export step
+      updateStepData(sessionId, 'export', {
+        driveUploaded: true,
+        driveUrl: data.driveUrl,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   // Download PDF
   const handleDownload = () => {
-    if (!pdfUrl) return;
+    if (!pdfDataRef.current) return;
 
     const link = document.createElement('a');
-    link.href = pdfUrl;
+    link.href = pdfDataRef.current;
     link.download = `${session?.topic.slug || 'carousel'}-carousel.pdf`;
     link.click();
   };
 
   // Continue to next step
   const handleContinue = () => {
-    if (!pdfUrl) {
-      setError('Please generate PDF first');
-      return;
-    }
-
     setCurrentStep(sessionId, 6);
     router.push(`/pipeline/${sessionId}/step-6-export`);
   };
@@ -128,11 +173,22 @@ export default function Step5PDF() {
           <div className="flex items-center gap-3">
             <div
               className={`w-3 h-3 rounded-full ${
-                pdfUrl ? 'bg-green-500' : 'bg-gray-300'
+                pdfGenerated ? 'bg-green-500' : 'bg-gray-300'
               }`}
             />
             <span className="text-sm">
-              PDF: {pdfUrl ? 'Generated' : 'Not generated'}
+              PDF: {pdfGenerated ? 'Generated (in memory)' : 'Not generated'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-3 h-3 rounded-full ${
+                driveUrl ? 'bg-green-500' : 'bg-gray-300'
+              }`}
+            />
+            <span className="text-sm">
+              Google Drive: {driveUrl ? 'Uploaded' : 'Not uploaded'}
             </span>
           </div>
         </div>
@@ -163,7 +219,7 @@ export default function Step5PDF() {
       )}
 
       {/* Action Buttons */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex flex-wrap gap-3 mb-6">
         <button
           onClick={handleGeneratePDF}
           disabled={isGenerating || !hasCarouselImages}
@@ -174,25 +230,59 @@ export default function Step5PDF() {
               <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
               Generating...
             </>
-          ) : pdfUrl ? (
+          ) : pdfGenerated ? (
             'Regenerate PDF'
           ) : (
             'Generate PDF'
           )}
         </button>
 
-        {pdfUrl && (
-          <button
-            onClick={handleDownload}
-            className="bg-brand-green text-white px-4 py-2 rounded-lg font-medium hover:bg-green-600 transition"
-          >
-            Download PDF
-          </button>
+        {pdfGenerated && (
+          <>
+            <button
+              onClick={handleDownload}
+              className="bg-gray-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-700 transition"
+            >
+              Download PDF
+            </button>
+
+            <button
+              onClick={handleUploadToDrive}
+              disabled={isUploading || !!driveUrl}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isUploading ? (
+                <>
+                  <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                  Uploading...
+                </>
+              ) : driveUrl ? (
+                'Uploaded to Drive'
+              ) : (
+                'Upload to Google Drive'
+              )}
+            </button>
+          </>
         )}
       </div>
 
+      {/* Drive Link */}
+      {driveUrl && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+          <p className="text-green-800 font-medium">PDF uploaded to Google Drive!</p>
+          <a
+            href={driveUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-green-600 hover:underline text-sm"
+          >
+            View in Google Drive →
+          </a>
+        </div>
+      )}
+
       {/* PDF Preview */}
-      {pdfUrl && (
+      {pdfGenerated && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
           <h3 className="font-semibold text-brand-primary mb-4">PDF Preview</h3>
           <div className="bg-gray-50 rounded-lg p-4 text-center">
@@ -219,8 +309,7 @@ export default function Step5PDF() {
 
         <button
           onClick={handleContinue}
-          disabled={!pdfUrl}
-          className="bg-brand-accent text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          className="bg-brand-accent text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-600 transition flex items-center gap-2"
         >
           Continue to Export
           <span>→</span>

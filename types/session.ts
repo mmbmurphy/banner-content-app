@@ -117,7 +117,8 @@ export interface PipelineSession {
   // Step 5: PDF
   pdf: {
     pdfUrl?: string;
-    status: 'pending' | 'generated';
+    driveUrl?: string;
+    status: 'pending' | 'generated' | 'uploaded';
   };
 
   // Step 6: Export
