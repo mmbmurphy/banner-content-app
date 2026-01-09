@@ -21,6 +21,13 @@ export async function POST(request: Request) {
     // Parse service account credentials
     const credentials = JSON.parse(serviceAccountJson);
 
+    if (!credentials.private_key) {
+      throw new Error('Service account credentials missing private_key');
+    }
+    if (!credentials.client_email) {
+      throw new Error('Service account credentials missing client_email');
+    }
+
     // Get access token using service account
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
